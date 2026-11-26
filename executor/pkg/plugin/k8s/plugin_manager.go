@@ -3,7 +3,6 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/flyteorg/flyte/v2/flyteplugins/go/tasks/pluginmachinery/io"
@@ -70,17 +69,21 @@ type PluginManager struct {
 	plugin     k8s.Plugin
 	kubeClient pluginsCore.KubeClient
 
-	eventWatcher     objectEventWatcher
-	eventWatcherOnce sync.Once
-	eventWatcherErr  error
+	// eventWatcher is shared by every PluginManager in the executor process; see
+	// NewObjectEventWatcher. It may be nil, in which case no object events are attached.
+	eventWatcher ObjectEventWatcher
 }
 
-// NewPluginManager creates a PluginManager that wraps a k8s.Plugin.
-func NewPluginManager(id string, plugin k8s.Plugin, kubeClient pluginsCore.KubeClient) *PluginManager {
+// NewPluginManager creates a PluginManager that wraps a k8s.Plugin. eventWatcher is the
+// executor-wide watcher of Kubernetes events (see NewObjectEventWatcher); it is shared
+// across plugin managers so each event is cached and handled once per process. A nil
+// eventWatcher disables attaching object events to task phases.
+func NewPluginManager(id string, plugin k8s.Plugin, kubeClient pluginsCore.KubeClient, eventWatcher ObjectEventWatcher) *PluginManager {
 	return &PluginManager{
-		id:         id,
-		plugin:     plugin,
-		kubeClient: kubeClient,
+		id:           id,
+		plugin:       plugin,
+		kubeClient:   kubeClient,
+		eventWatcher: eventWatcher,
 	}
 }
 
@@ -354,29 +357,6 @@ func (pm *PluginManager) Handle(ctx context.Context, tCtx pluginsCore.TaskExecut
 	}
 
 	return transition, nil
-}
-
-func (pm *PluginManager) initEventWatcher(ctx context.Context) {
-	if pm.eventWatcher != nil {
-		return
-	}
-
-	pm.eventWatcherOnce.Do(func() {
-		pm.eventWatcher, pm.eventWatcherErr = newControllerRuntimeEventWatcher(ctx, pm.kubeClient.GetCache())
-		if pm.eventWatcherErr != nil {
-			logger.Warnf(ctx, "Failed to initialize k8s object event watcher for plugin [%s]: %v", pm.GetID(), pm.eventWatcherErr)
-		}
-	})
-}
-
-// InitializeObjectEventWatcher starts watching Kubernetes object events for this plugin.
-// It is intended to be called during plugin initialization (before task handling starts).
-func (pm *PluginManager) InitializeObjectEventWatcher(ctx context.Context) error {
-	pm.initEventWatcher(ctx)
-	if pm.eventWatcherErr != nil {
-		return fmt.Errorf("failed to initialize k8s object event watcher for plugin %s: %w", pm.GetID(), pm.eventWatcherErr)
-	}
-	return nil
 }
 
 func (pm *PluginManager) attachRecentObjectEvents(

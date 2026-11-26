@@ -33,10 +33,10 @@ type eventInfo struct {
 	LastObservedAt time.Time
 }
 
-// objectEventWatcher lists the events cached for an object. The bounds filter on the time
+// ObjectEventWatcher lists the events cached for an object. The bounds filter on the time
 // the event was first created and recorded; a caller that cares about a repeating event
 // still happening now filters on LastObservedAt itself.
-type objectEventWatcher interface {
+type ObjectEventWatcher interface {
 	List(objectKey watchedObjectKey, createdAfter time.Time, recordedAfter time.Time) []*eventInfo
 }
 
@@ -47,6 +47,19 @@ type controllerRuntimeEventWatcher struct {
 type eventObjects struct {
 	mu         sync.RWMutex
 	eventInfos map[k8stypes.NamespacedName]*eventInfo
+}
+
+// NewObjectEventWatcher registers a single handler on the cache's shared Event informer and
+// returns the watcher that caches what it sees. Build one per executor process and pass it
+// to every PluginManager: events are keyed by (namespace, name, kind) of the object they
+// regard, so one cache serves every plugin, and each event is stored and handled once
+// rather than once per plugin.
+func NewObjectEventWatcher(ctx context.Context, cache ctrlcache.Cache) (ObjectEventWatcher, error) {
+	watcher, err := newControllerRuntimeEventWatcher(ctx, cache)
+	if err != nil {
+		return nil, err
+	}
+	return watcher, nil
 }
 
 func newControllerRuntimeEventWatcher(ctx context.Context, cache ctrlcache.Cache) (*controllerRuntimeEventWatcher, error) {

@@ -51,7 +51,10 @@ func (r *Registry) Initialize(ctx context.Context) error {
 		return nil
 	}
 
-	// Load k8s plugins
+	// Load k8s plugins. All of them share one event watcher: the Event informer is shared
+	// through the manager's cache anyway, and a watcher per plugin would store every event
+	// and run every handler once per plugin.
+	var eventWatcher executorK8s.ObjectEventWatcher
 	for _, entry := range r.pluginRegistry.GetK8sPlugins() {
 		if entry.ClusterPlugin != nil {
 			logger.Infof(ctx, "Skipping k8s plugin %q: cluster plugin entries are not supported by the executor", entry.ID)
@@ -60,14 +63,19 @@ func (r *Registry) Initialize(ctx context.Context) error {
 		if entry.Plugin == nil {
 			return fmt.Errorf("invalid k8s plugin entry %q: Plugin is nil", entry.ID)
 		}
+		if eventWatcher == nil {
+			w, err := executorK8s.NewObjectEventWatcher(ctx, r.setupCtx.KubeClient().GetCache())
+			if err != nil {
+				return fmt.Errorf("failed to initialize k8s object event watcher: %w", err)
+			}
+			eventWatcher = w
+		}
 		pm := executorK8s.NewPluginManager(
 			entry.ID,
 			entry.Plugin,
 			r.setupCtx.KubeClient(),
+			eventWatcher,
 		)
-		if err := pm.InitializeObjectEventWatcher(ctx); err != nil {
-			return fmt.Errorf("failed to initialize k8s object event watcher for plugin %s: %w", entry.ID, err)
-		}
 
 		for _, taskType := range entry.RegisteredTaskTypes {
 			if existing, ok := r.plugins[taskType]; ok {

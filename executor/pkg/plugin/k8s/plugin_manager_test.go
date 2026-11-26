@@ -44,7 +44,7 @@ func TestAddObjectMetadata_GeneratedNameMaxLength(t *testing.T) {
 			GeneratedNameMaxLength: nil,
 		})
 
-		pm := NewPluginManager("test-plugin", mockPlugin, nil)
+		pm := NewPluginManager("test-plugin", mockPlugin, nil, nil)
 
 		taskMetadata := &pluginsCoreMock.TaskExecutionMetadata{}
 		taskMetadata.EXPECT().GetNamespace().Return("test-ns")
@@ -70,7 +70,7 @@ func TestAddObjectMetadata_GeneratedNameMaxLength(t *testing.T) {
 			GeneratedNameMaxLength: ptr.To(maxLength),
 		})
 
-		pm := NewPluginManager("test-plugin", mockPlugin, nil)
+		pm := NewPluginManager("test-plugin", mockPlugin, nil, nil)
 
 		taskMetadata := &pluginsCoreMock.TaskExecutionMetadata{}
 		taskMetadata.EXPECT().GetNamespace().Return("test-ns")
@@ -102,7 +102,7 @@ func TestAddObjectMetadata_GeneratedNameMaxLength(t *testing.T) {
 			GeneratedNameMaxLength: ptr.To(maxLength),
 		})
 
-		pm := NewPluginManager("test-plugin", mockPlugin, nil)
+		pm := NewPluginManager("test-plugin", mockPlugin, nil, nil)
 
 		taskMetadata := &pluginsCoreMock.TaskExecutionMetadata{}
 		taskMetadata.EXPECT().GetNamespace().Return("test-ns")
@@ -164,7 +164,7 @@ func TestLaunchResource_InvalidCreateFastFails(t *testing.T) {
 	tCtx := &pluginsCoreMock.TaskExecutionContext{}
 	tCtx.EXPECT().TaskExecutionMetadata().Return(metadataMock("too-long-name"))
 
-	pm := NewPluginManager("test", plugin, kubeClient)
+	pm := NewPluginManager("test", plugin, kubeClient, nil)
 
 	transition, err := pm.launchResource(context.Background(), tCtx)
 	assert.NoError(t, err)
@@ -244,7 +244,7 @@ func TestLaunchResourceErrors(t *testing.T) {
 			tCtx := &pluginsCoreMock.TaskExecutionContext{}
 			tCtx.EXPECT().TaskExecutionMetadata().Return(metadataMock("name"))
 
-			pm := NewPluginManager("test", plugin, kubeClient)
+			pm := NewPluginManager("test", plugin, kubeClient, nil)
 
 			transition, err := pm.launchResource(context.Background(), tCtx)
 			if tt.wantErr {
@@ -320,7 +320,7 @@ func TestLaunchResource_AlreadyExists(t *testing.T) {
 			tCtx := &pluginsCoreMock.TaskExecutionContext{}
 			tCtx.EXPECT().TaskExecutionMetadata().Return(metadataMock("name"))
 
-			pm := NewPluginManager("test", plugin, kubeClient)
+			pm := NewPluginManager("test", plugin, kubeClient, nil)
 
 			transition, err := pm.launchResource(context.Background(), tCtx)
 			assert.NoError(t, err)
@@ -388,7 +388,7 @@ func TestHandle_WaitsForPreviousResourceToDrain(t *testing.T) {
 	plugin.EXPECT().GetProperties().Return(k8s.PluginProperties{})
 	plugin.EXPECT().BuildResource(mock.Anything, mock.Anything).Return(&v1.Pod{}, nil)
 
-	pm := NewPluginManager("test", plugin, kubeClient)
+	pm := NewPluginManager("test", plugin, kubeClient, nil)
 
 	transition, err := pm.Handle(context.Background(), tCtx)
 	assert.NoError(t, err)
@@ -408,7 +408,7 @@ func TestHandle_CorruptedPluginStateFailsPermanently(t *testing.T) {
 	plugin := &k8sMocks.Plugin{}
 	plugin.EXPECT().GetProperties().Return(k8s.PluginProperties{})
 
-	pm := NewPluginManager("test", plugin, &pluginsCoreMock.KubeClient{})
+	pm := NewPluginManager("test", plugin, &pluginsCoreMock.KubeClient{}, nil)
 
 	transition, err := pm.Handle(context.Background(), tCtx)
 	assert.NoError(t, err)
@@ -600,7 +600,7 @@ func TestClassifyGpuFailure(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			watcher := &fakeEventWatcher{events: map[watchedObjectKey][]*eventInfo{key: tt.events}}
-			pm := NewPluginManager("test-plugin", nil, nil)
+			pm := NewPluginManager("test-plugin", nil, nil, nil)
 			pm.eventWatcher = watcher
 
 			got := pm.classifyGpuFailure(failedPod(), tt.phaseInfo)
@@ -632,7 +632,7 @@ func TestClassifyGpuFailureRelevanceIsAnchoredOnTheFailure(t *testing.T) {
 		watcher := &fakeEventWatcher{events: map[watchedObjectKey][]*eventInfo{
 			key: {gpuFaultEventFor(79, gpufault.SeverityCritical, observed, observed, testPodUID)},
 		}}
-		pm := NewPluginManager("test-plugin", nil, nil)
+		pm := NewPluginManager("test-plugin", nil, nil, nil)
 		pm.eventWatcher = watcher
 		got := pm.classifyGpuFailure(failedPod(), phase)
 		assert.Equal(t, gpufault.CodeGpuFallenOffBus, got.Err().GetCode())
@@ -643,7 +643,7 @@ func TestClassifyGpuFailureRelevanceIsAnchoredOnTheFailure(t *testing.T) {
 		watcher := &fakeEventWatcher{events: map[watchedObjectKey][]*eventInfo{
 			key: {gpuFaultEventFor(79, gpufault.SeverityCritical, observed, observed, testPodUID)},
 		}}
-		pm := NewPluginManager("test-plugin", nil, nil)
+		pm := NewPluginManager("test-plugin", nil, nil, nil)
 		pm.eventWatcher = watcher
 		got := pm.classifyGpuFailure(failedPod(), phase)
 		assert.Equal(t, "UnknownError", got.Err().GetCode())
@@ -666,7 +666,7 @@ func TestClassifyGpuFailureRelevanceIsAnInterval(t *testing.T) {
 		watcher := &fakeEventWatcher{events: map[watchedObjectKey][]*eventInfo{
 			key: {gpuFaultEventFor(79, gpufault.SeverityCritical, createdAt, lastObservedAt, testPodUID)},
 		}}
-		pm := NewPluginManager("test-plugin", nil, nil)
+		pm := NewPluginManager("test-plugin", nil, nil, nil)
 		pm.eventWatcher = watcher
 		return pm.classifyGpuFailure(failedPod(), phase)
 	}
@@ -731,7 +731,7 @@ func TestClassifyGpuFailureAnchorsOnThePodNotItsStartTime(t *testing.T) {
 	watcher := &fakeEventWatcher{events: map[watchedObjectKey][]*eventInfo{
 		key: {gpuFaultEventFor(79, gpufault.SeverityCritical, faultedAt, faultedAt, testPodUID)},
 	}}
-	pm := NewPluginManager("test-plugin", nil, nil)
+	pm := NewPluginManager("test-plugin", nil, nil, nil)
 	pm.eventWatcher = watcher
 
 	got := pm.classifyGpuFailure(pod, phase)
@@ -750,7 +750,7 @@ func TestClassifyGpuFailureIdentity(t *testing.T) {
 		watcher := &fakeEventWatcher{events: map[watchedObjectKey][]*eventInfo{
 			key: {gpuFaultEventFor(79, gpufault.SeverityCritical, base, base, "")},
 		}}
-		pm := NewPluginManager("test-plugin", nil, nil)
+		pm := NewPluginManager("test-plugin", nil, nil, nil)
 		pm.eventWatcher = watcher
 		got := pm.classifyGpuFailure(failedPod(), phase)
 		assert.Nil(t, got.Err().GetGpuFault())
@@ -764,7 +764,7 @@ func TestClassifyGpuFailureIdentity(t *testing.T) {
 		watcher := &fakeEventWatcher{events: map[watchedObjectKey][]*eventInfo{
 			key: {gpuFaultEvent(79, gpufault.SeverityCritical, base)},
 		}}
-		pm := NewPluginManager("test-plugin", nil, nil)
+		pm := NewPluginManager("test-plugin", nil, nil, nil)
 		pm.eventWatcher = watcher
 		pod := failedPod()
 		pod.UID = ""
@@ -818,7 +818,7 @@ func TestClassifyGpuFailureSkips(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pm := NewPluginManager("test-plugin", nil, nil)
+			pm := NewPluginManager("test-plugin", nil, nil, nil)
 			if !tt.noWatcher {
 				pm.eventWatcher = &fakeEventWatcher{events: events}
 			}
@@ -842,7 +842,7 @@ func TestAddObjectMetadata_ManagedLabel(t *testing.T) {
 	newManager := func(t *testing.T) *PluginManager {
 		mockPlugin := k8sMocks.NewPlugin(t)
 		mockPlugin.EXPECT().GetProperties().Return(k8s.PluginProperties{})
-		return NewPluginManager("test-plugin", mockPlugin, nil)
+		return NewPluginManager("test-plugin", mockPlugin, nil, nil)
 	}
 
 	// Mirrors what NewTaskExecutionMetadata injects into every task's labels.
@@ -1042,7 +1042,7 @@ func TestClassifyExternalTermination(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pm := NewPluginManager("test-plugin", nil, nil)
+			pm := NewPluginManager("test-plugin", nil, nil, nil)
 			if !tt.noWatcher {
 				pm.eventWatcher = &fakeEventWatcher{events: map[watchedObjectKey][]*eventInfo{key: tt.events}}
 			}
